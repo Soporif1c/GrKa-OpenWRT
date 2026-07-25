@@ -10,6 +10,7 @@ var callCheckUpdates = rpc.declare({ object: 'luci.grka', method: 'check_updates
 var callUpdateCore = rpc.declare({ object: 'luci.grka', method: 'update_core', params: ['version'] });
 var callUpdatePanel = rpc.declare({ object: 'luci.grka', method: 'update_panel' });
 var callInstallDashboard = rpc.declare({ object: 'luci.grka', method: 'install_dashboard' });
+var callSetCompact = rpc.declare({ object: 'luci.grka', method: 'set_compact', params: ['enabled'] });
 var callTaskStatus = rpc.declare({ object: 'luci.grka', method: 'task_status' });
 
 function row(label, node) {
@@ -65,6 +66,7 @@ return view.extend({
 		u.coreVersion2.textContent = st.core_installed ? (st.core_version || 'неизвестно') : 'не установлено';
 		u.panelVersion.textContent = st.panel_version || '—';
 		u.autostart.checked = !!st.autostart;
+		u.compact.checked = !!st.compact;
 
 		u.btnStart.disabled = !!st.running || !st.core_installed;
 		u.btnStop.disabled = !st.running;
@@ -162,6 +164,14 @@ return view.extend({
 					self.serviceAction(ev.target.checked ? 'enable' : 'disable');
 				}
 			}),
+			compact: E('input', {
+				'type': 'checkbox',
+				'change': function(ev) {
+					var on = ev.target.checked;
+					self.runTask(callSetCompact(on ? '1' : '0'),
+						on ? 'Включение компактного режима' : 'Выключение компактного режима');
+				}
+			}),
 			btnStart: E('button', {
 				'class': 'btn cbi-button cbi-button-positive',
 				'click': ui.createHandlerFn(this, 'serviceAction', 'start')
@@ -212,6 +222,11 @@ return view.extend({
 				row('Состояние', [ u.state, u.details ]),
 				row('Версия ядра', u.coreVersion),
 				row('Автозапуск', u.autostart),
+				row('Компактный режим', [
+					u.compact,
+					E('span', { 'style': 'color:#888;font-size:12px;margin-left:.5em' },
+						'ядро хранится сжатым на флеше (~12 МБ вместо ~35) и распаковывается в RAM при старте')
+				]),
 				row('Управление', [ u.btnStart, u.btnStop, u.btnRestart ])
 			]),
 

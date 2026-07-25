@@ -9,6 +9,8 @@ var callCheckConfig = rpc.declare({ object: 'luci.grka', method: 'check_config',
 var callService = rpc.declare({ object: 'luci.grka', method: 'service', params: ['action'] });
 var callListBackups = rpc.declare({ object: 'luci.grka', method: 'list_backups', expect: { backups: [] } });
 var callRestoreBackup = rpc.declare({ object: 'luci.grka', method: 'restore_backup', params: ['name'] });
+var callListTemplates = rpc.declare({ object: 'luci.grka', method: 'list_templates', expect: { templates: [] } });
+var callGetTemplate = rpc.declare({ object: 'luci.grka', method: 'get_template', params: ['id'] });
 
 /* ---------- Парсер прокси-ссылок -> объект прокси mihomo ---------- */
 
@@ -364,6 +366,40 @@ return view.extend({
 		});
 	},
 
+	handleTemplates: function() {
+		var self = this;
+		return callListTemplates().then(function(templates) {
+			var rows = (templates || []).map(function(t) {
+				return E('div', { 'style': 'display:flex;justify-content:space-between;align-items:center;gap:1em;padding:.4em 0;border-bottom:1px solid #eee' }, [
+					E('span', {}, t.title || t.id),
+					E('button', {
+						'class': 'btn cbi-button cbi-button-apply',
+						'click': function() {
+							callGetTemplate(t.id).then(function(res) {
+								if (!res || !res.ok) {
+									ui.addNotification(null, E('p', {}, (res && res.error) || 'Не удалось загрузить шаблон'), 'error');
+									return;
+								}
+								if (self.textarea.value.trim() &&
+									!window.confirm('Заменить текущее содержимое редактора шаблоном «' + (t.title || t.id) + '»? (На роутере ничего не изменится, пока вы не нажмёте «Сохранить».)'))
+									return;
+								self.textarea.value = res.content || '';
+								ui.hideModal();
+								ui.addNotification(null, E('p', {}, 'Шаблон загружен в редактор. Добавьте прокси и сохраните конфигурацию.'), 'info');
+							});
+						}
+					}, 'Загрузить')
+				]);
+			});
+			ui.showModal('Шаблоны конфигураций', [
+				E('div', { 'class': 'cbi-map-descr' }, 'Готовые конфигурации mihomo. Шаблон загружается в редактор — на роутер он попадёт только после нажатия «Сохранить».'),
+				rows.length ? E('div', {}, rows) : E('p', {}, 'Шаблоны не найдены'),
+				E('div', { 'class': 'right' },
+					E('button', { 'class': 'btn', 'click': ui.hideModal }, 'Закрыть'))
+			]);
+		});
+	},
+
 	handleAddProxy: function() {
 		var self = this;
 		var input = E('input', {
@@ -447,6 +483,7 @@ return view.extend({
 			E('div', { 'class': 'cbi-section' }, [
 				E('div', { 'style': 'margin-bottom:.5em' }, [
 					E('button', { 'class': 'btn cbi-button cbi-button-action', 'click': ui.createHandlerFn(this, 'handleAddProxy') }, 'Добавить прокси из ссылки'),
+					E('button', { 'class': 'btn cbi-button cbi-button-neutral', 'style': 'margin-left:.5em', 'click': ui.createHandlerFn(this, 'handleTemplates') }, 'Шаблоны'),
 					E('button', { 'class': 'btn cbi-button cbi-button-neutral', 'style': 'margin-left:.5em', 'click': ui.createHandlerFn(this, 'handleBackups') }, 'Бэкапы')
 				]),
 				this.textarea,

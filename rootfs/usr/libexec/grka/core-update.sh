@@ -42,8 +42,18 @@ chmod +x "$TMP_BIN"
 WAS_RUNNING="$(pidof mihomo 2>/dev/null || true)"
 [ -n "$WAS_RUNNING" ] && { echo "Остановка mihomo..."; /etc/init.d/mihomo stop; }
 
-mv "$TMP_BIN" /usr/bin/mihomo
-chmod +x /usr/bin/mihomo
+if compact_on; then
+	echo "Компактный режим: ядро сохраняется сжатым ($CORE_GZ)"
+	cp "$TMP_GZ" "$CORE_GZ"
+	mkdir -p /tmp/grka
+	mv "$TMP_BIN" "$CORE_TMP"
+	chmod +x "$CORE_TMP"
+	rm -f "$CORE_BIN"
+else
+	mv "$TMP_BIN" "$CORE_BIN"
+	chmod +x "$CORE_BIN"
+	rm -f "$CORE_GZ" "$CORE_TMP"
+fi
 
 [ -n "$WAS_RUNNING" ] && { echo "Запуск mihomo..."; /etc/init.d/mihomo start; }
 

@@ -1,0 +1,65 @@
+# title: Минимальный (весь трафик напрямую, прокси по правилам добавляются вручную)
+# Документация mihomo: https://wiki.metacubex.one/
+
+mixed-port: 7890
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+ipv6: false
+
+external-controller: 0.0.0.0:9090
+external-ui: ui
+secret: ''
+
+profile:
+  store-selected: true
+  store-fake-ip: true
+
+unified-delay: true
+tcp-concurrent: true
+
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - '*.lan'
+    - '+.local'
+  nameserver:
+    - https://dns.google/dns-query
+    - https://cloudflare-dns.com/dns-query
+  proxy-server-nameserver:
+    - 77.88.8.8
+    - 1.1.1.1
+
+tun:
+  enable: true
+  stack: system
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+
+# Прокси добавляются кнопкой «Добавить прокси из ссылки»
+proxies: []
+
+proxy-groups: []
+
+# Пример настройки после добавления прокси:
+#
+# proxy-groups:
+#   - name: PROXY
+#     type: select
+#     proxies:
+#       - имя-вашего-прокси
+#
+# rules:
+#   - GEOIP,RU,DIRECT
+#   - MATCH,PROXY
+
+rules:
+  - MATCH,DIRECT

@@ -5,11 +5,13 @@ START=99
 STOP=15
 USE_PROCD=1
 
-PROG="/usr/bin/mihomo"
 CONF_DIR="/etc/mihomo"
 
 start_service() {
-	if [ ! -x "$PROG" ]; then
+	local PROG
+	. /usr/libexec/grka/common.sh 2>/dev/null
+	PROG="$(ensure_core 2>/dev/null)"
+	if [ -z "$PROG" ]; then
 		echo "Ядро mihomo не установлено — установите его через панель GrKa OpenWRT (LuCI -> Службы)"
 		return 1
 	fi

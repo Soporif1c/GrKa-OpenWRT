@@ -32,6 +32,45 @@ latest_tag() {
 		sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
+CORE_BIN="/usr/bin/mihomo"
+CORE_GZ="/usr/share/grka/mihomo.gz"
+CORE_TMP="/tmp/grka/mihomo"
+COMPACT_FLAG="/etc/mihomo/.compact"
+
+compact_on() {
+	[ -f "$COMPACT_FLAG" ]
+}
+
+# Есть ли ядро в каком-либо виде (бинарник или сжатый архив)
+core_ready() {
+	[ -x "$CORE_BIN" ] || [ -x "$CORE_TMP" ] || [ -f "$CORE_GZ" ]
+}
+
+# Путь к готовому к запуску бинарнику (без распаковки)
+core_bin() {
+	if [ -x "$CORE_BIN" ]; then
+		echo "$CORE_BIN"
+	elif [ -x "$CORE_TMP" ]; then
+		echo "$CORE_TMP"
+	fi
+}
+
+# Путь к бинарнику, при необходимости распаковав сжатое ядро в /tmp
+ensure_core() {
+	local b
+	b="$(core_bin)"
+	if [ -z "$b" ] && [ -f "$CORE_GZ" ]; then
+		mkdir -p /tmp/grka
+		if gunzip -c "$CORE_GZ" > "$CORE_TMP" 2>/dev/null; then
+			chmod +x "$CORE_TMP"
+			b="$CORE_TMP"
+		else
+			rm -f "$CORE_TMP"
+		fi
+	fi
+	echo "$b"
+}
+
 mihomo_arch() {
 	# Определение архитектуры бинарника mihomo для этого устройства
 	local pkgarch=""

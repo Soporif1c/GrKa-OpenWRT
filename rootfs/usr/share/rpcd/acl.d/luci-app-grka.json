@@ -3,12 +3,12 @@
 		"description": "Grant access to GrKa OpenWRT panel",
 		"read": {
 			"ubus": {
-				"luci.grka": [ "status", "get_config", "check_config", "get_log", "list_backups", "check_updates", "task_status" ]
+				"luci.grka": [ "status", "get_config", "check_config", "get_log", "list_backups", "check_updates", "task_status", "list_templates", "get_template" ]
 			}
 		},
 		"write": {
 			"ubus": {
-				"luci.grka": [ "service", "set_config", "restore_backup", "update_core", "update_panel", "install_dashboard" ]
+				"luci.grka": [ "service", "set_config", "restore_backup", "update_core", "update_panel", "install_dashboard", "set_compact" ]
 			}
 		}
 	}

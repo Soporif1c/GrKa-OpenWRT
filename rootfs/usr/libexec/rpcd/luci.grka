@@ -2,9 +2,10 @@
 # GrKa OpenWRT - rpcd backend (ubus object: luci.grka)
 
 . /usr/share/libubox/jshn.sh
+. /usr/libexec/grka/common.sh
 
 GRKA_LIB="/usr/libexec/grka"
-MIHOMO_BIN="/usr/bin/mihomo"
+TEMPLATE_DIR="/usr/share/grka/templates"
 MIHOMO_DIR="/etc/mihomo"
 CONFIG_FILE="$MIHOMO_DIR/config.yaml"
 BACKUP_DIR="$MIHOMO_DIR/backups"
@@ -15,8 +16,10 @@ TASK_LOCK="/tmp/grka-task.lock"
 MAX_BACKUPS=10
 
 core_version() {
-	[ -x "$MIHOMO_BIN" ] || return 0
-	"$MIHOMO_BIN" -v 2>/dev/null | head -n1 | awk '{print $3}'
+	local b
+	b="$(core_bin)"
+	[ -n "$b" ] || return 0
+	"$b" -v 2>/dev/null | head -n1 | awk '{print $3}'
 }
 
 panel_version() {
@@ -71,6 +74,9 @@ list)
 	"update_core": { "version": "v1.19.0" },
 	"update_panel": {},
 	"install_dashboard": {},
+	"set_compact": { "enabled": "1" },
+	"list_templates": {},
+	"get_template": { "id": "services" },
 	"task_status": {}
 }
 EOF
@@ -86,18 +92,20 @@ call)
 		MEM=""
 		[ -n "$PID" ] && MEM="$(awk '/VmRSS/ {print $2}' "/proc/$PID/status" 2>/dev/null)"
 		API_PORT="$(sed -n "s/^external-controller:.*:\([0-9]\{1,\}\).*/\1/p" "$CONFIG_FILE" 2>/dev/null | head -n1)"
+		API_SECRET="$(sed -n "s/^secret:[[:space:]]*[\"']\{0,1\}\([^\"']*\)[\"']\{0,1\}[[:space:]]*$/\1/p" "$CONFIG_FILE" 2>/dev/null | head -n1)"
 		json_init
 		json_add_boolean running "$([ -n "$PID" ] && echo 1 || echo 0)"
 		json_add_string pid "$PID"
 		json_add_string memory "$MEM"
-		json_add_boolean core_installed "$([ -x "$MIHOMO_BIN" ] && echo 1 || echo 0)"
+		json_add_boolean core_installed "$(core_ready && echo 1 || echo 0)"
 		json_add_string core_version "$(core_version)"
 		json_add_string panel_version "$(panel_version)"
 		json_add_boolean autostart "$("$INIT_SCRIPT" enabled 2>/dev/null && echo 1 || echo 0)"
 		json_add_boolean config_exists "$([ -f "$CONFIG_FILE" ] && echo 1 || echo 0)"
 		json_add_boolean dashboard_installed "$([ -f "$MIHOMO_DIR/ui/index.html" ] && echo 1 || echo 0)"
+		json_add_boolean compact "$(compact_on && echo 1 || echo 0)"
 		json_add_string api_port "${API_PORT:-9090}"
-		. "$GRKA_LIB/common.sh"
+		json_add_string api_secret "$API_SECRET"
 		json_add_string arch "$(mihomo_arch)"
 		json_dump
 		;;
@@ -144,11 +152,12 @@ call)
 			TARGET="/tmp/grka-check.yaml"
 			printf '%s\n' "$content" > "$TARGET"
 		fi
-		if [ ! -x "$MIHOMO_BIN" ]; then
+		BIN="$(ensure_core)"
+		if [ -z "$BIN" ]; then
 			RC=1
 			OUT="Ядро mihomo не установлено — установите его на вкладке «Статус»"
 		else
-			OUT="$("$MIHOMO_BIN" -t -d "$MIHOMO_DIR" -f "$TARGET" 2>&1)"
+			OUT="$("$BIN" -t -d "$MIHOMO_DIR" -f "$TARGET" 2>&1)"
 			RC=$?
 		fi
 		rm -f /tmp/grka-check.yaml
@@ -209,6 +218,43 @@ call)
 		;;
 	install_dashboard)
 		run_task "$GRKA_LIB/dashboard-install.sh"
+		;;
+	set_compact)
+		json_get_var enabled enabled
+		if [ "$enabled" = "1" ]; then
+			run_task "$GRKA_LIB/compact-toggle.sh" on
+		else
+			run_task "$GRKA_LIB/compact-toggle.sh" off
+		fi
+		;;
+	list_templates)
+		json_init
+		json_add_array templates
+		for f in "$TEMPLATE_DIR"/*.yaml; do
+			[ -f "$f" ] || continue
+			ID="${f##*/}"
+			ID="${ID%.yaml}"
+			TITLE="$(sed -n '1s/^#[[:space:]]*title:[[:space:]]*//p' "$f")"
+			json_add_object ""
+			json_add_string id "$ID"
+			json_add_string title "${TITLE:-$ID}"
+			json_close_object
+		done
+		json_close_array
+		json_dump
+		;;
+	get_template)
+		json_get_var tid id
+		tid="${tid##*/}"
+		json_init
+		if [ -n "$tid" ] && [ -f "$TEMPLATE_DIR/$tid.yaml" ]; then
+			json_add_boolean ok 1
+			json_add_string content "$(cat "$TEMPLATE_DIR/$tid.yaml")"
+		else
+			json_add_boolean ok 0
+			json_add_string error "Шаблон не найден"
+		fi
+		json_dump
 		;;
 	task_status)
 		json_init
