@@ -1,0 +1,221 @@
+#!/bin/sh
+# GrKa OpenWRT - rpcd backend (ubus object: luci.grka)
+
+. /usr/share/libubox/jshn.sh
+
+GRKA_LIB="/usr/libexec/grka"
+MIHOMO_BIN="/usr/bin/mihomo"
+MIHOMO_DIR="/etc/mihomo"
+CONFIG_FILE="$MIHOMO_DIR/config.yaml"
+BACKUP_DIR="$MIHOMO_DIR/backups"
+VERSION_FILE="/usr/share/grka/version"
+INIT_SCRIPT="/etc/init.d/mihomo"
+TASK_LOG="/tmp/grka-task.log"
+TASK_LOCK="/tmp/grka-task.lock"
+MAX_BACKUPS=10
+
+core_version() {
+	[ -x "$MIHOMO_BIN" ] || return 0
+	"$MIHOMO_BIN" -v 2>/dev/null | head -n1 | awk '{print $3}'
+}
+
+panel_version() {
+	cat "$VERSION_FILE" 2>/dev/null
+}
+
+task_running() {
+	[ -f "$TASK_LOCK" ] || return 1
+	local pid
+	pid="$(cat "$TASK_LOCK" 2>/dev/null)"
+	[ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+run_task() {
+	if task_running; then
+		json_init
+		json_add_boolean started 0
+		json_add_string error "Другая задача ещё выполняется, дождитесь её завершения"
+		json_dump
+		return
+	fi
+	: > "$TASK_LOG"
+	sh "$@" > "$TASK_LOG" 2>&1 < /dev/null &
+	echo $! > "$TASK_LOCK"
+	json_init
+	json_add_boolean started 1
+	json_dump
+}
+
+make_backup() {
+	[ -f "$CONFIG_FILE" ] || return 0
+	mkdir -p "$BACKUP_DIR"
+	cp "$CONFIG_FILE" "$BACKUP_DIR/config-$(date +%Y%m%d-%H%M%S).yaml"
+	ls -1t "$BACKUP_DIR"/config-*.yaml 2>/dev/null | tail -n +"$((MAX_BACKUPS + 1))" | while read -r f; do
+		rm -f "$f"
+	done
+}
+
+case "$1" in
+list)
+	cat <<'EOF'
+{
+	"status": {},
+	"service": { "action": "restart" },
+	"get_config": {},
+	"set_config": { "content": "yaml" },
+	"check_config": { "content": "yaml" },
+	"get_log": { "lines": 200 },
+	"list_backups": {},
+	"restore_backup": { "name": "config.yaml" },
+	"check_updates": {},
+	"update_core": { "version": "v1.19.0" },
+	"update_panel": {},
+	"install_dashboard": {},
+	"task_status": {}
+}
+EOF
+	;;
+call)
+	INPUT="$(cat)"
+	[ -n "$INPUT" ] || INPUT='{}'
+	json_load "$INPUT"
+
+	case "$2" in
+	status)
+		PID="$(pidof mihomo 2>/dev/null | awk '{print $1}')"
+		MEM=""
+		[ -n "$PID" ] && MEM="$(awk '/VmRSS/ {print $2}' "/proc/$PID/status" 2>/dev/null)"
+		API_PORT="$(sed -n "s/^external-controller:.*:\([0-9]\{1,\}\).*/\1/p" "$CONFIG_FILE" 2>/dev/null | head -n1)"
+		json_init
+		json_add_boolean running "$([ -n "$PID" ] && echo 1 || echo 0)"
+		json_add_string pid "$PID"
+		json_add_string memory "$MEM"
+		json_add_boolean core_installed "$([ -x "$MIHOMO_BIN" ] && echo 1 || echo 0)"
+		json_add_string core_version "$(core_version)"
+		json_add_string panel_version "$(panel_version)"
+		json_add_boolean autostart "$("$INIT_SCRIPT" enabled 2>/dev/null && echo 1 || echo 0)"
+		json_add_boolean config_exists "$([ -f "$CONFIG_FILE" ] && echo 1 || echo 0)"
+		json_add_boolean dashboard_installed "$([ -f "$MIHOMO_DIR/ui/index.html" ] && echo 1 || echo 0)"
+		json_add_string api_port "${API_PORT:-9090}"
+		. "$GRKA_LIB/common.sh"
+		json_add_string arch "$(mihomo_arch)"
+		json_dump
+		;;
+	service)
+		json_get_var action action
+		case "$action" in
+		start | stop | restart | enable | disable)
+			"$INIT_SCRIPT" "$action" >/dev/null 2>&1
+			json_init
+			json_add_boolean ok 1
+			;;
+		*)
+			json_init
+			json_add_boolean ok 0
+			json_add_string error "Недопустимое действие"
+			;;
+		esac
+		json_dump
+		;;
+	get_config)
+		json_init
+		if [ -f "$CONFIG_FILE" ]; then
+			json_add_boolean exists 1
+			json_add_string content "$(cat "$CONFIG_FILE")"
+		else
+			json_add_boolean exists 0
+			json_add_string content ""
+		fi
+		json_dump
+		;;
+	set_config)
+		json_get_var content content
+		mkdir -p "$MIHOMO_DIR"
+		make_backup
+		printf '%s\n' "$content" > "$CONFIG_FILE"
+		json_init
+		json_add_boolean ok 1
+		json_dump
+		;;
+	check_config)
+		json_get_var content content
+		TARGET="$CONFIG_FILE"
+		if [ -n "$content" ]; then
+			TARGET="/tmp/grka-check.yaml"
+			printf '%s\n' "$content" > "$TARGET"
+		fi
+		if [ ! -x "$MIHOMO_BIN" ]; then
+			RC=1
+			OUT="Ядро mihomo не установлено — установите его на вкладке «Статус»"
+		else
+			OUT="$("$MIHOMO_BIN" -t -d "$MIHOMO_DIR" -f "$TARGET" 2>&1)"
+			RC=$?
+		fi
+		rm -f /tmp/grka-check.yaml
+		json_init
+		json_add_boolean ok "$([ "$RC" -eq 0 ] && echo 1 || echo 0)"
+		json_add_string output "$OUT"
+		json_dump
+		;;
+	get_log)
+		json_get_var lines lines
+		[ -n "$lines" ] || lines=200
+		json_init
+		json_add_string log "$(logread -e mihomo 2>/dev/null | tail -n "$lines")"
+		json_dump
+		;;
+	list_backups)
+		json_init
+		json_add_array backups
+		if [ -d "$BACKUP_DIR" ]; then
+			for f in $(ls -1t "$BACKUP_DIR"/config-*.yaml 2>/dev/null); do
+				json_add_string "" "${f##*/}"
+			done
+		fi
+		json_close_array
+		json_dump
+		;;
+	restore_backup)
+		json_get_var name name
+		name="${name##*/}"
+		json_init
+		if [ -n "$name" ] && [ -f "$BACKUP_DIR/$name" ]; then
+			make_backup
+			cp "$BACKUP_DIR/$name" "$CONFIG_FILE"
+			json_add_boolean ok 1
+		else
+			json_add_boolean ok 0
+			json_add_string error "Бэкап не найден"
+		fi
+		json_dump
+		;;
+	check_updates)
+		. "$GRKA_LIB/common.sh"
+		CORE_LATEST="$(latest_tag "$MIHOMO_REPO")"
+		PANEL_LATEST="$(latest_tag "$GRKA_REPO")"
+		json_init
+		json_add_string core_current "$(core_version)"
+		json_add_string core_latest "$CORE_LATEST"
+		json_add_string panel_current "$(panel_version)"
+		json_add_string panel_latest "${PANEL_LATEST#v}"
+		json_dump
+		;;
+	update_core)
+		json_get_var version version
+		run_task "$GRKA_LIB/core-update.sh" "${version:-}"
+		;;
+	update_panel)
+		run_task "$GRKA_LIB/self-update.sh"
+		;;
+	install_dashboard)
+		run_task "$GRKA_LIB/dashboard-install.sh"
+		;;
+	task_status)
+		json_init
+		json_add_boolean running "$(task_running && echo 1 || echo 0)"
+		json_add_string log "$(tail -c 16384 "$TASK_LOG" 2>/dev/null)"
+		json_dump
+		;;
+	esac
+	;;
+esac

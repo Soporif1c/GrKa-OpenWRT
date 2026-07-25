@@ -1,0 +1,39 @@
+{
+	"admin/services/grka": {
+		"title": "GrKa OpenWRT",
+		"order": 40,
+		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-grka" ]
+		}
+	},
+
+	"admin/services/grka/status": {
+		"title": "Статус",
+		"order": 1,
+		"action": {
+			"type": "view",
+			"path": "grka/status"
+		}
+	},
+
+	"admin/services/grka/config": {
+		"title": "Конфигурация",
+		"order": 2,
+		"action": {
+			"type": "view",
+			"path": "grka/config"
+		}
+	},
+
+	"admin/services/grka/logs": {
+		"title": "Логи",
+		"order": 3,
+		"action": {
+			"type": "view",
+			"path": "grka/logs"
+		}
+	}
+}
