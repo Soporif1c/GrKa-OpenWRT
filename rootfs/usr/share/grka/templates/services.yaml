@@ -34,8 +34,10 @@ dns:
   enhanced-mode: fake-ip
   fake-ip-range: 198.18.0.1/16
   fake-ip-filter: ['*.lan', '+.local']
-  nameserver: [https://dns.google/dns-query, https://cloudflare-dns.com/dns-query]
-  proxy-server-nameserver: [77.88.8.8, 1.1.1.1]
+  nameserver: [8.8.8.8, 1.1.1.1]
+  # Если провайдер перехватывает обычный DNS — используйте DoH:
+  # nameserver: [https://dns.google/dns-query, https://cloudflare-dns.com/dns-query]
+  proxy-server-nameserver: [8.8.8.8, 1.1.1.1]
 
 tun:
   enable: true
@@ -202,7 +204,7 @@ rule-providers:
 rules:
   - RULE-SET,adlist@domain,REJECT # Блокировка рекламы
   - RULE-SET,quic@inline,REJECT-DROP # Блокировка QUIC
-  - OR,((DOMAIN-SUFFIX,gql.twitch.tv),(DOMAIN-SUFFIX,usher.ttvnw.net)),Заблок. сервисы # Высокое качество на Twitch.tv (может вызвать рекламу)
+  - OR,((DOMAIN-SUFFIX,gql.twitch.tv),(DOMAIN-SUFFIX,usher.ttvnw.net)),Twitch # Высокое качество на Twitch.tv — идёт туда же, куда выбран Twitch (может вызвать рекламу)
   - RULE-SET,category-ai@domain,AI
   - RULE-SET,steam@domain,Steam
   - RULE-SET,spotify@domain,Spotify

@@ -30,10 +30,14 @@ dns:
     - '*.lan'
     - '+.local'
   nameserver:
-    - https://dns.google/dns-query
-    - https://cloudflare-dns.com/dns-query
+    - 8.8.8.8
+    - 1.1.1.1
+  # Если провайдер перехватывает обычный DNS — используйте DoH:
+  # nameserver:
+  #   - https://dns.google/dns-query
+  #   - https://cloudflare-dns.com/dns-query
   proxy-server-nameserver:
-    - 77.88.8.8
+    - 8.8.8.8
     - 1.1.1.1
 
 # TUN-режим: перехват всего трафика роутера (требуется kmod-tun)
