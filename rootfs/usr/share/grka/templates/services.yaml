@@ -3,10 +3,14 @@
 # ВАЖНО: перед сохранением добавьте хотя бы один прокси («Добавить прокси из ссылки») —
 # группы подхватят его автоматически (include-all: true).
 #
-# После сохранения и запуска mihomo перейдите на вкладку «Селекторы» и выберите
-# подключение для каждой группы сервисов.
-# Группа «Заблок. сервисы» содержит домены большинства заблокированных ресурсов.
-# Остальные группы (YouTube, Discord и т.д.) имеют приоритет над группой «Заблок. сервисы».
+# По умолчанию ВЕСЬ трафик идёт напрямую. Всё настраивается на вкладке «Селекторы»:
+#   - «Весь трафик»    — главный переключатель: весь трафик напрямую (DIRECT) или через прокси
+#   - «Заблок. сервисы» — выберите здесь прокси, чтобы заблокированные ресурсы открывались через него
+#   - группы сервисов (YouTube, Discord, Twitch и т.д.) — у каждой свой выбор: напрямую (DIRECT),
+#     через «Заблок. сервисы» или через конкретный прокси; они имеют приоритет над остальными правилами
+#
+# Пример «только YouTube и Twitch через прокси, остальное напрямую»:
+#   Весь трафик = DIRECT, Заблок. сервисы = DIRECT, YouTube = <прокси>, Twitch = <прокси>
 #
 # Основано на шаблоне zxc-rv/XKeen-UI, адаптировано под OpenWRT (TUN-режим вместо redir/tproxy).
 #######################################################################################################
@@ -51,10 +55,17 @@ anchors:
 proxies: []
 
 proxy-groups:
+  - name: Весь трафик
+    type: select
+    icon: https://www.svgrepo.com/show/396567/globe-with-meridians.svg
+    include-all: true
+    proxies: [DIRECT, Заблок. сервисы]
+
   - name: Заблок. сервисы
     type: select
     icon: https://cdn.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Reject.png
     include-all: true
+    proxies: [DIRECT]
 
   - name: YouTube
     type: select
@@ -134,7 +145,7 @@ proxy-groups:
     icon: https://cdn.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Bot.png
     include-all: true
     exclude-filter: 🇷🇺
-    proxies: [Заблок. сервисы]
+    proxies: [Заблок. сервисы, DIRECT]
 
   - name: Twitter
     type: select
@@ -220,4 +231,4 @@ rules:
   - RULE-SET,vodafone@ipcidr,CDN
   - RULE-SET,gcore@ipcidr,CDN
   - RULE-SET,cdn77@ipcidr,CDN
-  - MATCH,DIRECT
+  - MATCH,Весь трафик
